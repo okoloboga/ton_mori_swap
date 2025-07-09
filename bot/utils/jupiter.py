@@ -47,9 +47,9 @@ class JupiterAPI:
                     raise Exception(f"Failed to get quote: {response.status}")
                 data = await response.json()
                 logger.debug(f"Quote response data: {data}")
-                if not data.get("data"):
-                    logger.error(f"Invalid quote response: {data}")
-                    raise Exception("Invalid quote response")
+                if not data.get("outAmount"):
+                    logger.error(f"Invalid quote response: missing outAmount in {data}")
+                    raise Exception("Invalid quote response: missing outAmount")
                 logger.info(f"Successfully received quote for output_mint {output_mint}")
                 return data
         except Exception as e:
