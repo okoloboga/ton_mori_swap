@@ -9,7 +9,7 @@ services:
       redis:
         condition: service_started
     volumes:
-      - .:/app
+      - ./bot:/app
 
   db:
     image: postgres:15-alpine
