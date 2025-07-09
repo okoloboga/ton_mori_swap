@@ -4,7 +4,12 @@ import redis.asyncio as redis
 import logging
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["https://your-mini-app.your-domain.com"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://moriswap.space", "http://localhost:8080"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 logger = logging.getLogger(__name__)
 
 @app.get("/get-quote-id")
