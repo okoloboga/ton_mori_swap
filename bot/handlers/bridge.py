@@ -1,15 +1,13 @@
 from aiogram import Router, F
-from aiogram.filters import StateFilter, Command
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from fluentogram import TranslatorRunner
 import aiohttp
 import json
 from config import get_config, MemeCoinConfig
 
 from states.swap_form import SwapForm
-from keyboards.keyboards import bridge_confirm
 from utils.rhino import get_bridge_quote, commit_quote
 from utils.jupiter import get_token_pairs
 from utils.wallet_validator import is_valid_solana_address
@@ -20,22 +18,36 @@ logger = logging.getLogger(__name__)
 
 bridge_router = Router()
 
-@bridge_router.message(Command("bridge"))
-async def bridge_command(message: Message, state: FSMContext, i18n: TranslatorRunner):
+@bridge_router.callback_query(F.data == "bridge")
+async def bridge_start(callback: CallbackQuery, state: FSMContext, i18n: TranslatorRunner):
+    await callback.message.answer(i18n.enter.amount.message())
+    await state.set_state(SwapForm.enter_amount)
+    await callback.answer()
+
+@bridge_router.message(StateFilter(SwapForm.enter_amount))
+async def process_amount(message: Message, state: FSMContext, i18n: TranslatorRunner):
     try:
-        args = message.text.split()
-        if len(args) != 3:
-            await message.answer(i18n.invalid.command.format(command="/bridge <amount> <solana_wallet>"))
-            return
-        usd_amount = float(args[1])
-        solana_wallet = args[2]
-        if not is_valid_solana_address(solana_wallet):
-            await message.answer(i18n.invalid.solana.wallet.message())
-            return
+        usd_amount = float(message.text)
         if usd_amount <= 0:
             await message.answer(i18n.invalid.amount.message())
             return
+        await state.update_data(usd_amount=usd_amount)
+        await message.answer(i18n.enter.solana.wallet.message())
+        await state.set_state(SwapForm.enter_solana_wallet)
+    except ValueError:
+        await message.answer(i18n.invalid.amount.message())
 
+@bridge_router.message(StateFilter(SwapForm.enter_solana_wallet))
+async def process_solana_wallet(message: Message, state: FSMContext, i18n: TranslatorRunner):
+    solana_wallet = message.text
+    if not is_valid_solana_address(solana_wallet):
+        await message.answer(i18n.invalid.solana.wallet.message())
+        return
+
+    state_data = await state.get_data()
+    usd_amount = state_data["usd_amount"]
+
+    try:
         # Получаем курс USDT/USD с CoinGecko
         async with aiohttp.ClientSession() as session:
             async with session.get("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd") as resp:
@@ -79,7 +91,7 @@ async def bridge_command(message: Message, state: FSMContext, i18n: TranslatorRu
         )
         await state.set_state(SwapForm.bridge_confirm)
     except Exception as e:
-        logger.error(f"Failed to process bridge command: {e}")
+        logger.error(f"Failed to process bridge: {e}")
         await message.answer(i18n.bridge.failed.message())
         await state.clear()
 

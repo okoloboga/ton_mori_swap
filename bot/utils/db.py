@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import asyncpg
 import redis.asyncio as redis
 import logging
@@ -26,7 +27,7 @@ async def db_start():
                     operation_type TEXT NOT NULL,
                     status TEXT NOT NULL,
                     tx_id TEXT,
-                    solana_tx_hash TEXT,
+                    solana_tx_hash TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -36,7 +37,15 @@ async def db_start():
         logger.error(f"Failed to initialize database: {e}")
         return None
 
-async def log_transaction(user_id: int, solana_wallet: str, amount_in: str, commission_amount: str, operation_type: str, status: str, tx_id: str = None):
+async def log_transaction(
+        user_id: int, 
+        solana_wallet: str, 
+        amount_in: str, 
+        commission_amount: str, 
+        operation_type: str, 
+        status: str, 
+        solana_tx_hash: str,
+        tx_id: str = 'none'):
     pool = await db_start()
     if not pool:
         logger.error("No database pool available")
@@ -45,10 +54,10 @@ async def log_transaction(user_id: int, solana_wallet: str, amount_in: str, comm
         async with pool.acquire() as conn:
             await conn.execute(
                 '''
-                INSERT INTO transactions (user_id, solana_wallet, amount_in, commission_amount, operation_type, status, tx_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO transactions (user_id, solana_wallet, amount_in, commission_amount, operation_type, status, tx_id, solana_tx_hash)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ''',
-                user_id, solana_wallet, amount_in, commission_amount, operation_type, status, tx_id
+                user_id, solana_wallet, amount_in, commission_amount, operation_type, status, tx_id, solana_tx_hash
             )
         logger.info(f"Logged transaction for user {user_id}, operation {operation_type}, status {status}, tx_id {tx_id}")
     except Exception as e:
