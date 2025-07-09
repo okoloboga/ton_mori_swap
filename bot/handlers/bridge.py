@@ -5,9 +5,10 @@ from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKe
 from fluentogram import TranslatorRunner
 import aiohttp
 import json
-from config import get_config, MemeCoinConfig
+from config import get_config, MemeCoinConfig, MiniAppConfig  # Добавлен импорт MiniAppConfig
 
 from states.swap_form import SwapForm
+from keyboards.keyboards import bridge_confirm
 from utils.rhino import get_bridge_quote, commit_quote
 from utils.jupiter import get_token_pairs
 from utils.wallet_validator import is_valid_solana_address
@@ -71,7 +72,8 @@ async def process_solana_wallet(message: Message, state: FSMContext, i18n: Trans
         )
 
         # Открываем Mini App
-        mini_app_url = get_config(None, "mini_app").url
+        mini_app_config = get_config(MiniAppConfig, "mini_app")  # Изменено с get_config(None, "mini_app").url
+        mini_app_url = mini_app_config.url
         await message.answer(
             i18n.confirm.bridge.message(
                 amount=amount_usdt,
