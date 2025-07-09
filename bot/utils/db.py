@@ -27,7 +27,7 @@ async def db_start():
                     operation_type TEXT NOT NULL,
                     status TEXT NOT NULL,
                     tx_id TEXT,
-                    solana_tx_hash TEXT NOT NULL,
+                    solana_tx_hash TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -44,7 +44,7 @@ async def log_transaction(
         commission_amount: str, 
         operation_type: str, 
         status: str, 
-        solana_tx_hash: str,
+        solana_tx_hash: str = 'none',
         tx_id: str = 'none'):
     pool = await db_start()
     if not pool:

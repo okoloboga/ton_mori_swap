@@ -24,7 +24,7 @@ async def bridge_start(callback: CallbackQuery, state: FSMContext, i18n: Transla
     await state.set_state(SwapForm.enter_amount)
     await callback.answer()
 
-@bridge_router.message(StateFilter(SwapForm.enter_amount))
+@bridge_router.message(StateFilter(SwapForm.bridge_amount))
 async def process_amount(message: Message, state: FSMContext, i18n: TranslatorRunner):
     try:
         usd_amount = float(message.text)
@@ -37,7 +37,7 @@ async def process_amount(message: Message, state: FSMContext, i18n: TranslatorRu
     except ValueError:
         await message.answer(i18n.invalid.amount.message())
 
-@bridge_router.message(StateFilter(SwapForm.enter_solana_wallet))
+@bridge_router.message(StateFilter(SwapForm.solana_wallet))
 async def process_solana_wallet(message: Message, state: FSMContext, i18n: TranslatorRunner):
     solana_wallet = message.text
     if not is_valid_solana_address(solana_wallet):
