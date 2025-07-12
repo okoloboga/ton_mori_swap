@@ -1,33 +1,52 @@
 import asyncio
 import logging
 from dotenv import load_dotenv
-
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.exceptions import TelegramBadRequest
+from aiogram_tonconnect.middleware import AiogramTonConnectMiddleware
 from fluentogram import TranslatorHub
+from pytonconnect import TonConnect
+from datetime import datetime, timedelta
+from backoff import on_exception, expo
 
 from utils.i18n import create_translator_hub
 from utils.middleware import TranslatorRunnerMiddleware
 from utils.db import db_start, get_pending_bridges, update_status
 from utils.rhino import check_bridge_status
 from utils.jupiter import jupiter_api
-from handlers import start_router, bridge_router, swap_router, help_router
+from handlers import start_router, bridge_router, swap_router
 from keyboards.keyboards import bridge_completed
-from config import get_config, BotConfig
+from config import get_config, BotConfig, TonConnect
+
 
 load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+@on_exception(expo, Exception, max_tries=5)
+async def check_bridge_status_with_backoff(tx_id):
+    return await check_bridge_status(tx_id)
+
 async def poll_pending_bridges(bot: Bot, translator_hub: TranslatorHub):
     while True:
         try:
             pending_bridges = await get_pending_bridges()
             for tx in pending_bridges:
-                status_info = await check_bridge_status(tx["tx_id"])
+                if tx["created_at"] < datetime.now() - timedelta(hours=1):
+                    await update_status(transaction_id=tx["id"], status="failed_bridge")
+                    i18n = translator_hub.get_translator_by_locale("ru")
+                    try:
+                        await bot.send_message(
+                            chat_id=tx["user_id"],
+                            text=i18n.bridge.failed.message()
+                        )
+                    except TelegramBadRequest as e:
+                        logger.warning(f"Failed to send bridge failed message to {tx['user_id']}: {e}")
+                    continue
+                status_info = await check_bridge_status_with_backoff(tx["tx_id"])
                 if status_info["status"] == "executed":
                     await update_status(
                         transaction_id=tx["id"],
@@ -69,6 +88,7 @@ async def main():
     logger.info('Starting Bot')
 
     bot_config = get_config(BotConfig, "bot")
+    tonconnect_config = get_config(TonConnect, "tonconnect")
     pool = await db_start()
     if not pool:
         logger.error("Failed to connect to the database. Exiting.")
@@ -77,11 +97,11 @@ async def main():
     bot = Bot(token=bot_config.token.get_secret_value(),
               default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(pool=pool)
-
+    
     translator_hub = create_translator_hub()
     dp.update.middleware(TranslatorRunnerMiddleware())
-
-    dp.include_routers(start_router, bridge_router, swap_router, help_router)
+    dp.update.middleware(AiogramTonConnectMiddleware(tonconnect=TonConnect(manifest_url=tonconnect_config.manifest)))
+    dp.include_routers(start_router, bridge_router, swap_router)
 
     try:
         await bot.delete_webhook(drop_pending_updates=True)
